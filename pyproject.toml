@@ -1,0 +1,15 @@
+[project]
+name = "redraven-demo-python"
+version = "0.1.0"
+description = "Minimal demo for the RedRaven Python SDK."
+readme = "README.md"
+requires-python = ">=3.10"
+
+dependencies = [
+    "httpx>=0.27",
+    "python-dotenv>=1.0",
+    "redraven>=0.1.4",
+]
+
+[project.optional-dependencies]
+openai = ["openai>=2.36.0"]
