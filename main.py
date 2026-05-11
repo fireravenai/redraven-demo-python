@@ -9,6 +9,7 @@ from typing import Any
 
 import redraven
 from dotenv import load_dotenv
+from openai import OpenAI
 
 from util import ask, ask_yes_no, coerce_test_id, select_mode
 
@@ -37,13 +38,53 @@ DEFAULT_CERTIFICATIONS = [
     # "TGV",
     # "PCI_DSS",
 ]
+DEFAULT_SPECIFIC_POLICIES: list[str] = []
 DEFAULT_MAX_POLICIES = 5
 DEFAULT_MAX_PROMPTS_PER_POLICY = 2
-
-
-
-from openai import OpenAI
 _openai = OpenAI()
+
+
+def build_test_metadata(*, use_images: bool) -> dict[str, Any]:
+    metadata: dict[str, Any] = {
+        "business_context": DEFAULT_BUSINESS_CONTEXT,
+        "use_case": DEFAULT_USE_CASE,
+        "certifications": list(DEFAULT_CERTIFICATIONS),
+        "max_policies": DEFAULT_MAX_POLICIES,
+        "max_prompts_per_policy": DEFAULT_MAX_PROMPTS_PER_POLICY,
+        "modes": {
+            "text": True,
+            "image": use_images,
+            "mcp": False,
+            "rag": False,
+        },
+    }
+    if DEFAULT_SPECIFIC_POLICIES:
+        metadata["policies"] = list(DEFAULT_SPECIFIC_POLICIES)
+    return metadata
+
+
+def build_generate_kwargs(
+    *,
+    project_id: str,
+    test_name: str,
+    use_images: bool,
+) -> dict[str, Any]:
+    generate_kwargs: dict[str, Any] = {
+        "project_id": project_id,
+        "test_name": test_name or DEFAULT_TEST_NAME,
+        "business_context": DEFAULT_BUSINESS_CONTEXT,
+        "use_case": DEFAULT_USE_CASE,
+        "certifications": list(DEFAULT_CERTIFICATIONS),
+        "max_policies": DEFAULT_MAX_POLICIES,
+        "max_prompts_per_policy": DEFAULT_MAX_PROMPTS_PER_POLICY,
+        "metadata": build_test_metadata(use_images=use_images),
+    }
+    if DEFAULT_SPECIFIC_POLICIES:
+        generate_kwargs["policies"] = [
+            {"policy": policy} for policy in DEFAULT_SPECIFIC_POLICIES
+        ]
+    return generate_kwargs
+
 
 def call_llm(
     prompt: str,
@@ -59,6 +100,16 @@ def call_llm(
     )
     return resp.choices[0].message.content or ""
 
+
+def print_result_summary(result: Any) -> None:
+    print(f"state             = {result.state}")
+    print(f"expected_cases    = {result.expected_cases}")
+    print(f"received          = {result.received}")
+    print(f"failed            = {result.failed}")
+    print(f"failed_case_ids   = {result.failed_case_ids}")
+    if result.summary:
+        agg = result.summary.get("aggregated_policies") or []
+        print(f"aggregated policies: {len(agg)}")
 
 
 async def main() -> int:
@@ -84,17 +135,11 @@ async def main() -> int:
                 "Enable image mode (image payloads for half of the cases)",
                 default=False,
             )
-            gen_kw: dict[str, Any] = {
-                "project_id": project_id,
-                "test_name": test_name or DEFAULT_TEST_NAME,
-                "business_context": DEFAULT_BUSINESS_CONTEXT,
-                "use_case": DEFAULT_USE_CASE,
-                "certifications": DEFAULT_CERTIFICATIONS,
-                "max_policies": DEFAULT_MAX_POLICIES,
-                "max_prompts_per_policy": DEFAULT_MAX_PROMPTS_PER_POLICY,
-            }
-            if use_images:
-                gen_kw["metadata"] = {"modes": {"image": True}}
+            gen_kw = build_generate_kwargs(
+                project_id=project_id,
+                test_name=test_name,
+                use_images=use_images,
+            )
 
             result = await client.generate_and_run_test(
                 generate_kwargs=gen_kw,
@@ -103,14 +148,7 @@ async def main() -> int:
                 retries=2,
                 allow_partial=True,
             )
-            print(f"state             = {result.state}")
-            print(f"expected_cases    = {result.expected_cases}")
-            print(f"received          = {result.received}")
-            print(f"failed            = {result.failed}")
-            print(f"failed_case_ids   = {result.failed_case_ids}")
-            if result.summary:
-                agg = result.summary.get("aggregated_policies") or []
-                print(f"aggregated policies: {len(agg)}")
+            print_result_summary(result)
             return 0
 
         if mode == "generate_only":
@@ -124,17 +162,11 @@ async def main() -> int:
                 "Enable image mode (image payloads for half of the cases)",
                 default=False,
             )
-            gen_kw: dict[str, Any] = {
-                "project_id": project_id,
-                "test_name": test_name or DEFAULT_TEST_NAME,
-                "business_context": DEFAULT_BUSINESS_CONTEXT,
-                "use_case": DEFAULT_USE_CASE,
-                "certifications": DEFAULT_CERTIFICATIONS,
-                "max_policies": DEFAULT_MAX_POLICIES,
-                "max_prompts_per_policy": DEFAULT_MAX_PROMPTS_PER_POLICY,
-            }
-            if use_images:
-                gen_kw["metadata"] = {"modes": {"image": True}}
+            gen_kw = build_generate_kwargs(
+                project_id=project_id,
+                test_name=test_name,
+                use_images=use_images,
+            )
 
             test_id = await client.generate_test(
                 generate_kwargs=gen_kw,
@@ -167,14 +199,7 @@ async def main() -> int:
             allow_partial=True,
         )
 
-    print(f"state             = {result.state}")
-    print(f"expected_cases    = {result.expected_cases}")
-    print(f"received          = {result.received}")
-    print(f"failed            = {result.failed}")
-    print(f"failed_case_ids   = {result.failed_case_ids}")
-    if result.summary:
-        agg = result.summary.get("aggregated_policies") or []
-        print(f"aggregated policies: {len(agg)}")
+    print_result_summary(result)
     return 0
 
 

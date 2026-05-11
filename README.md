@@ -40,4 +40,6 @@ uv run python main.py
 
 The script is interactive: it asks whether to generate tests + run, run existing tests, or only generate tests, then prompts for IDs/concurrency (with env-based defaults). For “run existing” it uses `call_agent`, then `wait_for_evaluation_ready`, then `get_eval_summary` (same pattern as waiting for the dataset before reading results). `generate_and_run_test` bundles generate → agent → eval wait for mode 1.
 
+Generated tests persist the generation metadata used by the RedRaven app, including business context, use case, certifications, specific policies, max policies, max prompts, and test modes. This keeps the Test Configuration modal and credits estimate in sync with the generated test.
+
 The default `call_llm` is a call to OpenAI assistant so you can wire up the flow with your OpenAI credentials.
