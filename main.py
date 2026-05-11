@@ -157,13 +157,6 @@ async def main() -> int:
             "Evaluation scheduling:",
             f"action={sched.action} reason={sched.reason} job_status={sched.job_status}",
         )
-        print(
-            "Repeated GET …/results/summary?kind=eval → 404 is normal until a worker "
-            "writes the eval manifest. In another terminal, from your redraven-backend clone:\n"
-            "  uv run redraven-pipeline-worker\n"
-            "Use the same DATABASE_URL as this API. Leave the worker running; wait for a "
-            "log line like \"job completed … evaluate_from_responses\" or fix any traceback."
-        )
         await client.wait_for_evaluation_ready(
             test_id=test_id,
             skip_initial_ensure=True,
