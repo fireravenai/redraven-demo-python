@@ -4,11 +4,19 @@ Minimal end-to-end demo of the [RedRaven Python SDK](https://pypi.org/project/re
 
 ## Setup
 
+Use [uv](https://docs.astral.sh/uv/). This demo pins **`redraven` to the local SDK checkout** next to this repo (`../redraven-sdk/packages/python`, editable) via `[tool.uv.sources]` in `pyproject.toml`.
+
 ```bash
-uv sync                # installs redraven from [RedRaven Python SDK](https://pypi.org/project/redraven/)
-# Optional: add the openai provider to use a real model
-uv sync --extra openai
+uv sync
 ```
+
+If you previously synced against PyPI, force the env to match the lockfile:
+
+```bash
+uv sync --reinstall-package redraven
+```
+
+To use the **published SDK** instead: in `pyproject.toml`, set `dependencies` to e.g. `redraven>=0.1.4` and **remove** the `[tool.uv.sources]` table, then run `uv lock && uv sync`.
 
 ## Configure .env
 
@@ -42,4 +50,4 @@ The script is interactive: it asks whether to generate tests + run, run existing
 
 Generated tests persist the generation metadata used by the RedRaven app, including business context, use case, certifications, specific policies, max policies, max prompts, and test modes. This keeps the Test Configuration modal and credits estimate in sync with the generated test.
 
-The default `call_llm` is a call to OpenAI assistant so you can wire up the flow with your OpenAI credentials.
+The default `call_llm` calls the OpenAI API so you can wire up the flow with your OpenAI credentials (`OPENAI_API_KEY` in `.env`).
