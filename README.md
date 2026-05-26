@@ -161,18 +161,26 @@ Mode `1` bundles these steps via `generate_and_run_test`.
 
 2. **Export policies to FireGuard**
    - In the recommendations sidebar, click **Export to FireGuard**
-   - Use the same email on FireGuard; create or link your account, then refresh the connection
+   - Use the same email on FireGuard; create or link your account, then click **Refresh Connection**
 
-![Export to FireGuard](images/image-12-export-fireguard.png)
+![FireGuard account required](images/image-12-export-fireguard.png)
+
+   - Choose which projects receive the exported policies (or apply to all projects in the organization), then click **Continue**
+
+![Select projects for export](images/image-13-export-fireguard-projects.png)
+
+   - Review the export summary (policy count, organization, projects), then click **Export Policies**
+
+![Export summary](images/image-14-export-fireguard-summary.png)
 
    - Exported policies appear in the FireGuard **Policies** page for use as input/output guardrails
 
-![FireGuard policies](images/image-13-fireguard-policies.png)
+![FireGuard policies](images/image-15-fireguard-policies.png)
 
 3. **Generate a report**
    - On the results page, use **Preview Report** or **Download Report**
 
-![Download report](images/image-14-report.png)
+![Download report](images/image-16-report.png)
 
 ## Project Structure
 
