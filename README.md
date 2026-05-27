@@ -33,7 +33,7 @@ Minimal end-to-end demo of [RedRaven](https://app.redraven.fireraven.ai) LLM red
    - Go to https://app.redraven.fireraven.ai/ and create an account
    - Open **Organizations** and click **+ Create New Organization**
 
-![Organizations overview — empty state](images/image-00-org-landing.png)
+<!-- ![Organizations overview — empty state](images/image-00-org-landing.png) -->
 
    - After creation, your organization appears on the overview
 
@@ -200,7 +200,7 @@ Mode `1` bundles these steps via `generate_and_run_test`.
 
 ## Dependencies
 
-- `redraven>=0.1.4` — RedRaven Python SDK
+- `redraven>=0.1.5` — RedRaven Python SDK
 - `httpx>=0.27` — HTTP client (SDK dependency)
 - `python-dotenv>=1.0` — load `.env`
 - `openai>=2.36.0` — optional (`uv sync --extra openai`) for the sample LLM
