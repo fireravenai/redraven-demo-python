@@ -9,7 +9,6 @@ from typing import Any
 
 import redraven
 from dotenv import load_dotenv
-from openai import AsyncOpenAI
 
 from util import (
     ask,
@@ -49,7 +48,6 @@ DEFAULT_CERTIFICATIONS = [
 DEFAULT_SPECIFIC_POLICIES: list[str] = []
 DEFAULT_MAX_POLICIES = 5
 DEFAULT_MAX_PROMPTS_PER_POLICY = 2
-_openai = AsyncOpenAI()
 
 
 def build_test_metadata(
@@ -129,8 +127,15 @@ async def call_llm(
     """
     To modify to call your own LLM or agent. The default implementation calls OpenAI's gpt-4o chat model.
     """
+    try:
+        from openai import AsyncOpenAI
+    except ImportError as exc:
+        raise RuntimeError(
+            "OpenAI is not installed. Run: uv sync --extra openai"
+        ) from exc
+
     payload_messages = messages or [{"role": "user", "content": prompt}]
-    resp = await _openai.chat.completions.create(
+    resp = await AsyncOpenAI().chat.completions.create(
         model="gpt-4o",
         messages=payload_messages,
     )
