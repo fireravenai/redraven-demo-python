@@ -82,7 +82,7 @@ Minimal end-to-end demo of [RedRaven](https://app.redraven.fireraven.ai) LLM red
    Create a `.env` file in the project directory:
 
    ```bash
-   REDRAVEN_BASE_URL=https://app.redraven.fireraven.ai
+   REDRAVEN_BASE_URL=https://api.redraven.fireraven.ai
 
    # From Organization Settings in https://app.redraven.fireraven.ai
    REDRAVEN_API_KEY=rr_...
