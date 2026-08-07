@@ -1,6 +1,7 @@
 """CLI helpers for the demo; not important for SDK usage, modify as needed."""
 from __future__ import annotations
 
+import asyncio
 import re
 from datetime import date
 from collections.abc import Awaitable, Callable
@@ -81,11 +82,18 @@ def select_mode() -> str:
         "     Skips generation. Same Step 2 agent timing and Step 3 eval wait as mode 1."
     )
     print("  3) Generate test only (dataset generation; no agent or eval in this script)")
+    print("  4) Run reconnaissance loop (probes → your LLM → evaluate refusals)")
+    print(
+        "     Requires a test with completed reconnaissance probes "
+        "(e.g. after UI policy generation)."
+    )
     choice = ask("Enter choice", default=default)
     if choice == "1":
         return "generate_run"
     if choice == "3":
         return "generate_only"
+    if choice == "4":
+        return "recon_loop"
     return "run_existing"
 
 
@@ -295,3 +303,95 @@ async def demo_run_existing_test_with_progress(
         expected_cases=handshake.expected_cases,
         allow_partial=allow_partial,
     )
+
+
+async def _backend_request(
+    method: str,
+    path: str,
+    *,
+    json: dict[str, Any] | None = None,
+) -> Any:
+    """Call backend /api/v1 with the same env auth as the SDK (no SDK method required)."""
+    import httpx
+    from redraven.config import Settings
+
+    settings = Settings.resolve(None, None, None)
+    url = f"/api/v1{path}"
+    async with httpx.AsyncClient(
+        base_url=settings.base_url,
+        headers={
+            "X-API-Key": settings.api_key,
+            "X-Organization-Id": settings.organization_id,
+            "User-Agent": "redraven-demo-python/recon",
+        },
+        timeout=httpx.Timeout(60.0, connect=10.0),
+    ) as http:
+        resp = await http.request(method, url, json=json)
+        if resp.status_code >= 400:
+            detail: Any
+            try:
+                detail = resp.json()
+            except Exception:
+                detail = resp.text
+            raise RuntimeError(f"{method} {url} failed ({resp.status_code}): {detail}")
+        if resp.status_code == 204 or not resp.content:
+            return None
+        return resp.json()
+
+
+async def demo_recon_loop(
+    *,
+    test_id: str,
+    llm: Callable[..., Awaitable[str]],
+    concurrency: int = 4,
+) -> dict[str, Any]:
+    """Fetch recon probes, call the target LLM, submit for refusal evaluation."""
+    print(f"Fetching test {test_id}…", flush=True)
+    test = await _backend_request("GET", f"/tests/{test_id}")
+    metadata = test.get("metadata") if isinstance(test, dict) else None
+    if not isinstance(metadata, dict):
+        metadata = {}
+    recon = metadata.get("reconnaissance")
+    if not isinstance(recon, dict):
+        raise RuntimeError(
+            "Test has no metadata.reconnaissance. "
+            "Generate policies in the app first (probes are created best-effort)."
+        )
+    status = recon.get("status")
+    probes = recon.get("probes") if isinstance(recon.get("probes"), list) else []
+    if status != "completed" or not probes:
+        raise RuntimeError(
+            f"Reconnaissance probes not ready (status={status!r}, "
+            f"probe_count={len(probes)}). Wait until status is 'completed'."
+        )
+
+    print(f"Running {len(probes)} reconnaissance probe(s) against your agent…", flush=True)
+    sem = asyncio.Semaphore(max(1, concurrency))
+    items: list[dict[str, Any]] = []
+
+    async def _one(probe: dict[str, Any]) -> dict[str, Any]:
+        prompt = probe.get("prompt") if isinstance(probe.get("prompt"), str) else ""
+        probe_id = probe.get("id") if isinstance(probe.get("id"), str) else None
+        async with sem:
+            try:
+                response = await llm(prompt)
+            except TypeError:
+                response = await llm(prompt, messages=None)
+            if not isinstance(response, str):
+                response = "" if response is None else str(response)
+        return {
+            "probe_id": probe_id,
+            "request": prompt,
+            "response": response,
+        }
+
+    gathered = await asyncio.gather(*[_one(p) for p in probes if isinstance(p, dict)])
+    items.extend(gathered)
+
+    print("Submitting responses for evaluation…", flush=True)
+    result = await _backend_request(
+        "POST",
+        f"/tests/{test_id}/reconnaissance/evaluate",
+        json={"items": items},
+    )
+    return result if isinstance(result, dict) else {}

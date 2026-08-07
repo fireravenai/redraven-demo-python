@@ -16,6 +16,7 @@ from util import (
     coerce_test_id,
     default_test_name,
     demo_generate_run_with_progress,
+    demo_recon_loop,
     demo_run_existing_test_with_progress,
     select_case_count_preset,
     select_mode,
@@ -160,6 +161,21 @@ def print_result_summary(result: Any) -> None:
         print(f"aggregated policies: {len(agg)}")
 
 
+def print_recon_summary(result: dict[str, Any]) -> None:
+    print(f"test_id           = {result.get('test_id')}")
+    print(f"answered_count    = {result.get('answered_count')}")
+    print(f"refused_count     = {result.get('refused_count')}")
+    results = result.get("results") or []
+    print(f"results           = {len(results)}")
+    for row in results:
+        if not isinstance(row, dict):
+            continue
+        probe_id = row.get("probe_id") or "?"
+        answered = row.get("is_answered")
+        label = "answered" if answered else "refused"
+        print(f"  - {probe_id}: {label}")
+
+
 async def main() -> int:
     env_test_id = coerce_test_id(os.getenv("REDRAVEN_TEST_ID", ""))
     env_project_id = os.getenv("REDRAVEN_PROJECT_ID", "").strip()
@@ -233,6 +249,37 @@ async def main() -> int:
                 generate_kwargs=gen_kw,
             )
             print(f"generated test_id = {test_id}")
+            return 0
+
+        if mode == "recon_loop":
+            test_id = coerce_test_id(ask("Test ID for reconnaissance", default=env_test_id))
+            if not test_id:
+                print(
+                    "ERROR: test_id is required to run the reconnaissance loop.",
+                    file=sys.stderr,
+                )
+                return 2
+            echo_default = os.getenv("REDRAVEN_ECHO", "").strip().lower() in (
+                "1",
+                "true",
+                "yes",
+            )
+            llm = select_llm(
+                echo_only=ask_yes_no(
+                    "Echo probe prompts only (skip LLM API — speed test)",
+                    default=echo_default,
+                ),
+            )
+            try:
+                recon_result = await demo_recon_loop(
+                    test_id=test_id,
+                    llm=llm,
+                    concurrency=concurrency,
+                )
+            except Exception as e:
+                print(f"ERROR: {e}", file=sys.stderr)
+                return 1
+            print_recon_summary(recon_result)
             return 0
 
         test_id = coerce_test_id(ask("Test ID to run", default=env_test_id))

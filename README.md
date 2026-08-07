@@ -4,9 +4,10 @@ Minimal end-to-end demo of [RedRaven](https://app.redraven.fireraven.ai) LLM red
 
 ## Features
 
-- **Interactive CLI**: Three modes — generate and run, run an existing test, or generate only
+- **Interactive CLI**: Four modes — generate and run, run an existing test, generate only, or run the reconnaissance loop
 - **Test generation**: Aligns with the RedRaven app (business context, use case, certifications, policies, test modes)
 - **Agent + evaluation flow**: `call_agent`, wait for evaluation, then `get_eval_summary` — or one-shot `generate_and_run_test`
+- **Reconnaissance loop**: Fetch attack-surface probes, call your agent, submit responses for refusal evaluation
 - **Example LLM integration**: Optional OpenAI-backed `call_llm` so you can try the full pipeline quickly
 - **FireGuard bridge**: Export failing policies from results into FireGuard guardrails
 
@@ -112,17 +113,20 @@ uv run python main.py
 
 ### Choose a mode
 
-The script prompts for one of three modes:
+The script prompts for one of four modes:
 
 | Mode | CLI choice | What it does |
 |------|------------|----------------|
 | Generate + run test | `1` | `client.generate_and_run_test(...)` — generate dataset, run your LLM on all cases, wait for evaluation, print summary |
 | Call agent + run evaluation on existing test | `2` | `call_agent` → `ensure_evaluation_from_client_responses` → `wait_for_evaluation_ready` → `get_eval_summary` |
 | Generate test only | `3` | `client.generate_test(...)` — returns `test_id` for a later run |
+| Run reconnaissance loop | `4` | Fetch `metadata.reconnaissance.probes`, call your LLM per probe, `POST …/reconnaissance/evaluate` (refusal → `is_answered=false`) |
 
 ![CLI mode selection](images/image-08-sdk-cli.png)
 
 You will be asked for **concurrency** (default `4`) and, depending on the mode, **Project ID** or **Test ID** (env vars are used as defaults when set).
+
+Mode `4` requires a test whose reconnaissance probes are already `completed` (created best-effort when generating policies in the app).
 
 For mode `2`, after the SDK finishes you should see a summary similar to:
 
