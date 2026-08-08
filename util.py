@@ -311,12 +311,19 @@ async def _backend_request(
     *,
     json: dict[str, Any] | None = None,
 ) -> Any:
-    """Call backend /api/v1 with the same env auth as the SDK (no SDK method required)."""
+    """Call backend with the same env auth as the SDK.
+
+    ``path`` may be ``/tests/...`` (defaults to ``/api/v1``) or a full
+    ``/api/v1/...`` / ``/api/v2/...`` path.
+    """
     import httpx
     from redraven.config import Settings
 
     settings = Settings.resolve(None, None, None)
-    url = f"/api/v1{path}"
+    if path.startswith("/api/"):
+        url = path
+    else:
+        url = f"/api/v1{path if path.startswith('/') else '/' + path}"
     async with httpx.AsyncClient(
         base_url=settings.base_url,
         headers={
@@ -391,7 +398,7 @@ async def demo_recon_loop(
     print("Submitting responses for evaluation…", flush=True)
     result = await _backend_request(
         "POST",
-        f"/tests/{test_id}/reconnaissance/evaluate",
+        f"/api/v2/tests/{test_id}/reconnaissance/evaluate",
         json={"items": items},
     )
     return result if isinstance(result, dict) else {}
