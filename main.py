@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import os
 import sys
+import traceback
 from typing import Any
 
 import redraven
@@ -15,6 +16,7 @@ from util import (
     ask_yes_no,
     coerce_test_id,
     default_test_name,
+    demo_attack_loop,
     demo_generate_run_with_progress,
     demo_recon_loop,
     demo_run_existing_test_with_progress,
@@ -161,6 +163,17 @@ def print_result_summary(result: Any) -> None:
         print(f"aggregated policies: {len(agg)}")
 
 
+def print_attack_summary(result: dict[str, Any]) -> None:
+    summary = result.get("summary") if isinstance(result.get("summary"), dict) else {}
+    inner = summary.get("summary") if isinstance(summary.get("summary"), dict) else {}
+    print(f"run_id            = {summary.get('run_id') or result.get('begin', {}).get('run_id')}")
+    print(f"status            = {summary.get('status')}")
+    print(f"scenarios_total   = {inner.get('scenarios_total')}")
+    print(f"attempts_total    = {inner.get('attempts_total')}")
+    print(f"attempts_failed   = {inner.get('attempts_failed')}")
+    print(f"asr               = {inner.get('asr')}")
+
+
 def print_recon_summary(result: dict[str, Any]) -> None:
     print(f"test_id           = {result.get('test_id')}")
     print(f"answered_count    = {result.get('answered_count')}")
@@ -280,6 +293,37 @@ async def main() -> int:
                 print(f"ERROR: {e}", file=sys.stderr)
                 return 1
             print_recon_summary(recon_result)
+            return 0
+
+        if mode == "attack_loop":
+            test_id = coerce_test_id(ask("Test ID for attacks", default=env_test_id))
+            if not test_id:
+                print(
+                    "ERROR: test_id is required to run the attack loop.",
+                    file=sys.stderr,
+                )
+                return 2
+            echo_default = os.getenv("REDRAVEN_ECHO", "").strip().lower() in (
+                "1",
+                "true",
+                "yes",
+            )
+            llm = select_llm(
+                echo_only=ask_yes_no(
+                    "Echo attack prompts only (skip LLM API — speed test)",
+                    default=echo_default,
+                ),
+            )
+            try:
+                attack_result = await demo_attack_loop(test_id=test_id, llm=llm)
+            except Exception as e:
+                print(
+                    f"ERROR: {type(e).__name__}: {e!r}",
+                    file=sys.stderr,
+                )
+                traceback.print_exc()
+                return 1
+            print_attack_summary(attack_result)
             return 0
 
         test_id = coerce_test_id(ask("Test ID to run", default=env_test_id))

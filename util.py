@@ -87,6 +87,11 @@ def select_mode() -> str:
         "     Requires a test with completed reconnaissance probes "
         "(e.g. after UI policy generation)."
     )
+    print("  5) Run attack loop (scenarios → multi-turn attacks → eval)")
+    print(
+        "     Requires scenarios (+ attack methods) on the test; "
+        "uses /api/v2/…/attack-run begin/next/turns/complete."
+    )
     choice = ask("Enter choice", default=default)
     if choice == "1":
         return "generate_run"
@@ -94,6 +99,8 @@ def select_mode() -> str:
         return "generate_only"
     if choice == "4":
         return "recon_loop"
+    if choice == "5":
+        return "attack_loop"
     return "run_existing"
 
 
@@ -310,11 +317,15 @@ async def _backend_request(
     path: str,
     *,
     json: dict[str, Any] | None = None,
+    timeout_s: float = 60.0,
+    retries: int = 3,
 ) -> Any:
     """Call backend with the same env auth as the SDK.
 
     ``path`` may be ``/tests/...`` (defaults to ``/api/v1``) or a full
     ``/api/v1/...`` / ``/api/v2/...`` path.
+
+    Retries transient connect/read timeouts (common on long attack runs).
     """
     import httpx
     from redraven.config import Settings
@@ -324,26 +335,46 @@ async def _backend_request(
         url = path
     else:
         url = f"/api/v1{path if path.startswith('/') else '/' + path}"
-    async with httpx.AsyncClient(
-        base_url=settings.base_url,
-        headers={
-            "X-API-Key": settings.api_key,
-            "X-Organization-Id": settings.organization_id,
-            "User-Agent": "redraven-demo-python/recon",
-        },
-        timeout=httpx.Timeout(60.0, connect=10.0),
-    ) as http:
-        resp = await http.request(method, url, json=json)
-        if resp.status_code >= 400:
-            detail: Any
-            try:
-                detail = resp.json()
-            except Exception:
-                detail = resp.text
-            raise RuntimeError(f"{method} {url} failed ({resp.status_code}): {detail}")
-        if resp.status_code == 204 or not resp.content:
-            return None
-        return resp.json()
+    last_exc: BaseException | None = None
+    for attempt in range(1, max(1, retries) + 1):
+        try:
+            async with httpx.AsyncClient(
+                base_url=settings.base_url,
+                headers={
+                    "X-API-Key": settings.api_key,
+                    "X-Organization-Id": settings.organization_id,
+                    "User-Agent": "redraven-demo-python/recon",
+                },
+                timeout=httpx.Timeout(timeout_s, connect=30.0),
+            ) as http:
+                resp = await http.request(method, url, json=json)
+                if resp.status_code >= 400:
+                    detail: Any
+                    body_text = resp.text or ""
+                    try:
+                        detail = resp.json()
+                    except Exception:
+                        detail = body_text
+                    raise RuntimeError(
+                        f"{method} {url} failed ({resp.status_code}): "
+                        f"detail={detail!r} body={body_text[:500]!r}"
+                    )
+                if resp.status_code == 204 or not resp.content:
+                    return None
+                return resp.json()
+        except (httpx.ConnectTimeout, httpx.ConnectError, httpx.ReadTimeout) as e:
+            last_exc = e
+            if attempt >= retries:
+                break
+            delay = min(2.0 * attempt, 8.0)
+            print(
+                f"  backend {method} {url} {type(e).__name__} "
+                f"(attempt {attempt}/{retries}); retry in {delay:.0f}s…",
+                flush=True,
+            )
+            await asyncio.sleep(delay)
+    assert last_exc is not None
+    raise last_exc
 
 
 async def demo_recon_loop(
@@ -402,3 +433,173 @@ async def demo_recon_loop(
         json={"items": items},
     )
     return result if isinstance(result, dict) else {}
+
+
+def _reraise_attack_stage(stage: str, turn_n: int, exc: BaseException) -> None:
+    """Attach stage context; preserve traceback for the outer handler."""
+    raise RuntimeError(
+        f"attack-run failed at stage={stage!r} turn={turn_n} "
+        f"exc_type={type(exc).__name__} exc={exc!r}"
+    ) from exc
+
+
+async def demo_attack_loop(
+    *,
+    test_id: str,
+    llm: Callable[..., Awaitable[str]],
+) -> dict[str, Any]:
+    """Begin attack-run, follow next/turns until done, then complete."""
+    print(f"Starting attack run for test {test_id}…", flush=True)
+    try:
+        begin = await _backend_request(
+            "POST",
+            f"/api/v2/tests/{test_id}/attack-run/begin",
+            timeout_s=60.0,
+        )
+    except Exception as e:
+        _reraise_attack_stage("begin", 0, e)
+    if not isinstance(begin, dict):
+        raise RuntimeError("attack-run/begin returned unexpected payload")
+    run_id = begin.get("run_id")
+    print(
+        f"run_id={run_id} work_count={begin.get('work_count')} "
+        f"scenarios={begin.get('scenarios_total')} "
+        f"techniques={begin.get('technique_ids')}",
+        flush=True,
+    )
+
+    turn_n = 0
+    while True:
+        try:
+            nxt = await _backend_request(
+                "GET",
+                f"/api/v2/tests/{test_id}/attack-run/next",
+                timeout_s=180.0,
+            )
+        except Exception as e:
+            _reraise_attack_stage("next", turn_n, e)
+        if not isinstance(nxt, dict):
+            raise RuntimeError("attack-run/next returned unexpected payload")
+        if nxt.get("done"):
+            print("Attack run finished (server marked done).", flush=True)
+            break
+
+        prompt = nxt.get("prompt") if isinstance(nxt.get("prompt"), str) else ""
+        prior = nxt.get("messages") if isinstance(nxt.get("messages"), list) else []
+        call_messages = list(prior) + [{"role": "user", "content": prompt}]
+        phase = nxt.get("phase")
+        attempt_id = nxt.get("attempt_id")
+        turn_n += 1
+        print(
+            f"  turn {turn_n}: phase={phase} attempt={nxt.get('attempt_index')} "
+            f"scenario={nxt.get('scenario_id')} technique={nxt.get('technique_id')}",
+            flush=True,
+        )
+
+        try:
+            try:
+                response = await llm(prompt, messages=call_messages)
+            except TypeError:
+                response = await llm(prompt)
+        except Exception as e:
+            _reraise_attack_stage("target_llm", turn_n, e)
+        if not isinstance(response, str):
+            response = "" if response is None else str(response)
+
+        after_messages = call_messages + [
+            {"role": "assistant", "content": response}
+        ]
+        try:
+            turn_resp = await _backend_request(
+                "POST",
+                f"/api/v2/tests/{test_id}/attack-run/turns",
+                json={
+                    "run_id": nxt.get("run_id") or run_id,
+                    "attempt_id": attempt_id,
+                    "request": prompt,
+                    "response": response,
+                    "messages": after_messages,
+                },
+                timeout_s=60.0,
+            )
+        except Exception as e:
+            _reraise_attack_stage("turns", turn_n, e)
+        if not isinstance(turn_resp, dict):
+            raise RuntimeError("attack-run/turns returned unexpected payload")
+
+        decision = turn_resp.get("decision")
+        evaluation = turn_resp.get("evaluation")
+        if decision == "pending":
+            try:
+                turn_resp = await _poll_attack_eval(
+                    test_id=test_id,
+                    run_id=str(nxt.get("run_id") or run_id),
+                    attempt_id=str(attempt_id),
+                    turn_index=int(turn_resp.get("turn_index") or 0),
+                )
+            except Exception as e:
+                _reraise_attack_stage("eval_status", turn_n, e)
+            decision = turn_resp.get("decision")
+            evaluation = turn_resp.get("evaluation")
+
+        print(f"    decision={decision} evaluation={evaluation}", flush=True)
+        if turn_resp.get("done"):
+            print("Attack run finished after turn submit.", flush=True)
+            break
+
+    try:
+        complete = await _backend_request(
+            "POST",
+            f"/api/v2/tests/{test_id}/attack-run/complete",
+            timeout_s=60.0,
+        )
+        summary = await _backend_request(
+            "GET",
+            f"/api/v2/tests/{test_id}/attack-results/summary",
+            timeout_s=30.0,
+        )
+    except Exception as e:
+        _reraise_attack_stage("complete_or_summary", turn_n, e)
+    return {
+        "begin": begin,
+        "complete": complete if isinstance(complete, dict) else {},
+        "summary": summary if isinstance(summary, dict) else {},
+    }
+
+
+async def _poll_attack_eval(
+    *,
+    test_id: str,
+    run_id: str,
+    attempt_id: str,
+    turn_index: int,
+    poll_interval_s: float = DEFAULT_POLL_INTERVAL_S,
+    poll_timeout_s: float = DEFAULT_POLL_TIMEOUT_S,
+) -> dict[str, Any]:
+    """Poll GET …/eval-status until decision is not pending."""
+    import time
+
+    deadline = time.monotonic() + poll_timeout_s
+    last: dict[str, Any] = {}
+    while time.monotonic() < deadline:
+        last = await _backend_request(
+            "GET",
+            f"/api/v2/tests/{test_id}/attack-run/eval-status"
+            f"?run_id={run_id}&attempt_id={attempt_id}&turn_index={turn_index}",
+            timeout_s=60.0,
+        )
+        if not isinstance(last, dict):
+            raise RuntimeError("eval-status returned unexpected payload")
+        if last.get("decision") != "pending":
+            return last
+        print(
+            f"    eval pending (turn_index={turn_index}); "
+            f"retry in {poll_interval_s:.0f}s…",
+            flush=True,
+        )
+        await asyncio.sleep(poll_interval_s)
+    raise TimeoutError(
+        f"attack eval still pending after {poll_timeout_s:.0f}s "
+        f"run_id={run_id} attempt_id={attempt_id} turn_index={turn_index} "
+        f"last={last!r}"
+    )
