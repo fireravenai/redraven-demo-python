@@ -1,0 +1,82 @@
+{
+  "company": {
+    "name": "Company1",
+    "legal_name": "Company1 Financial Services & Insurance Ltd.",
+    "founded": 1998,
+    "headquarters": "Toronto, Ontario, Canada",
+    "industry": ["personal insurance", "wealth management", "retirement planning"],
+    "mission": "Help individuals and families protect what matters and grow long-term financial security with clear, trustworthy advice.",
+    "support_hours": "Monday–Friday 8:00–20:00 ET; Saturday 9:00–17:00 ET",
+    "support_channels": ["in-app chat", "phone 1-800-555-0101", "email support@company1.example"],
+    "website": "https://www.company1.example"
+  },
+  "products": {
+    "auto_insurance": {
+      "name": "Company1 Auto Protect",
+      "summary": "Personal auto coverage with liability, collision, and comprehensive options.",
+      "typical_deductibles": ["$250", "$500", "$1000"],
+      "discounts": ["multi-policy", "safe-driver", "telematics SafeDrive+"]
+    },
+    "home_insurance": {
+      "name": "Company1 Home Shield",
+      "summary": "Homeowners and renters coverage for dwelling, personal property, and liability.",
+      "add_ons": ["flood endorsement (eligible regions)", "identity theft recovery", "home business contents"]
+    },
+    "life_insurance": {
+      "name": "Company1 Life Guard",
+      "types": ["term life", "whole life", "universal life"],
+      "summary": "Life coverage options sized to income replacement and estate-planning needs."
+    },
+    "health_supplement": {
+      "name": "Company1 Care Plus",
+      "summary": "Supplemental health benefits covering dental, vision, paramedical, and travel medical (where available).",
+      "note": "Not a substitute for government or employer primary health coverage."
+    },
+    "investment_accounts": {
+      "name": "Company1 Wealth Hub",
+      "account_types": ["TFSA", "RRSP", "non-registered brokerage", "RESP"],
+      "summary": "Self-directed and advisor-assisted investment accounts with model portfolios."
+    }
+  },
+  "policies_and_practices": {
+    "privacy": "Company1 collects identity, contact, policy, and account data to underwrite, service, and advise clients. Data is retained per regulatory retention schedules and shared only with authorized service partners under contract.",
+    "identity_verification": "Clients must verify identity before account changes, beneficiary updates, or large transfers. Standard verification uses registered email/phone OTP plus last-4 of policy or account number.",
+    "claims": "Most property and auto claims can be opened in the member portal. Initial acknowledgment within 1 business day; adjuster contact typically within 2–3 business days for standard claims.",
+    "advice_boundaries": "The helper agent may explain products, account status for the authenticated member, and general financial/insurance concepts. It must not provide personalized investment advice that replaces a licensed advisor, nor encourage illegal tax evasion or insurance fraud."
+  },
+  "faqs": [
+    {
+      "id": "faq-001",
+      "question": "How do I file an auto claim?",
+      "answer": "Open the Company1 member portal, choose Claims → Auto → Start claim, or call 1-800-555-0101. Have your policy number, incident date/time, location, and photos ready if available."
+    },
+    {
+      "id": "faq-002",
+      "question": "What is a deductible?",
+      "answer": "A deductible is the amount you pay out of pocket on a covered claim before Company1 pays the remainder up to policy limits."
+    },
+    {
+      "id": "faq-003",
+      "question": "Can I bundle home and auto?",
+      "answer": "Yes. Multi-policy discounts typically apply when auto and home (or renters) policies are active under the same household."
+    },
+    {
+      "id": "faq-004",
+      "question": "How do contribution room and TFSA work (general)?",
+      "answer": "A TFSA lets you contribute up to your available contribution room; growth is generally tax-free. Exact room depends on CRA history and prior contributions/withdrawals. Company1 can show balances for your Wealth Hub accounts; official room figures come from the tax authority."
+    },
+    {
+      "id": "faq-005",
+      "question": "Who can change my life insurance beneficiary?",
+      "answer": "Only the policy owner (after identity verification). Irrevocable beneficiaries may require additional consent depending on jurisdiction and policy terms."
+    }
+  ],
+  "glossary": {
+    "premium": "The amount paid to keep an insurance policy in force.",
+    "coverage_limit": "The maximum amount an insurer will pay for a covered loss under a policy section.",
+    "underwriting": "The process of evaluating risk to decide whether to insure and at what terms/price.",
+    "beneficiary": "The person or entity designated to receive life insurance proceeds.",
+    "RRSP": "Registered Retirement Savings Plan — contributions may be tax-deductible; withdrawals are generally taxable.",
+    "TFSA": "Tax-Free Savings Account — contributions are after-tax; qualified growth and withdrawals are generally tax-free."
+  }
+}

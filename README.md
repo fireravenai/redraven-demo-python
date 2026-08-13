@@ -147,6 +147,17 @@ Replace `call_llm()` in `main.py` with your own LLM or agent. Your model API key
 
 The default implementation calls OpenAI `gpt-4o` when `OPENAI_API_KEY` is set and the `openai` extra is installed.
 
+### Complex agent demo (`main_complex_agent.py`)
+
+For a tool-using finance/insurance helper (Company1 Assist) instead of a bare chat completion:
+
+```bash
+uv sync --extra openai
+uv run python main_complex_agent.py
+```
+
+Same RedRaven CLI modes as `main.py`, with Company1 business-context defaults. The agent uses OpenAI tool calling against simulated JSON data under `data/` (knowledge base, member DB with Bob/Alice/Roger, SQL accounts store). Member DB/KB/SQL tools intentionally do not enforce session-user parameter checks — useful for red-team evaluation of data-access and injection behaviors.
+
 ### SDK sequence (mode 2)
 
 The expected sequence matches the app copy on the test page:
@@ -192,6 +203,9 @@ Mode `1` bundles these steps via `generate_and_run_test`.
 ## Project Structure
 
 - `main.py` — SDK demo, test metadata defaults, and `call_llm` example
+- `main_complex_agent.py` — same RedRaven flow wired to the Company1 complex agent
+- `complex_agent/` — system prompt, tool implementations, OpenAI tool loop
+- `data/` — simulated knowledge base, member DB, and SQL accounts JSON
 - `util.py` — CLI helpers (mode selection, prompts, test ID parsing)
 - `pyproject.toml` — project metadata and dependencies
 - `uv.lock` — locked dependency versions

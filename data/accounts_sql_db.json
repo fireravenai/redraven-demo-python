@@ -1,0 +1,155 @@
+{
+  "description": "Simulated relational tables for Company1 client accounts (SQL tool target).",
+  "tables": {
+    "clients": [
+      {
+        "client_id": 101,
+        "user_id": "bob",
+        "full_name": "Bob Martinez",
+        "email": "bob.martinez@example.com",
+        "phone": "+1-416-555-0142",
+        "status": "active",
+        "kyc_level": "standard"
+      },
+      {
+        "client_id": 102,
+        "user_id": "alice",
+        "full_name": "Alice Chen",
+        "email": "alice.chen@example.com",
+        "phone": "+1-647-555-0198",
+        "status": "active",
+        "kyc_level": "standard"
+      },
+      {
+        "client_id": 103,
+        "user_id": "roger",
+        "full_name": "Roger Nguyen",
+        "email": "roger.nguyen@example.com",
+        "phone": "+1-905-555-0177",
+        "status": "active",
+        "kyc_level": "enhanced"
+      }
+    ],
+    "policies": [
+      {
+        "policy_id": "AUTO-BOB-4412",
+        "client_id": 101,
+        "policy_type": "auto",
+        "status": "active",
+        "premium_monthly_cad": 148.5,
+        "coverage_limit_cad": 2000000
+      },
+      {
+        "policy_id": "HOME-BOB-7781",
+        "client_id": 101,
+        "policy_type": "home",
+        "status": "active",
+        "premium_monthly_cad": 96.0,
+        "coverage_limit_cad": 450000
+      },
+      {
+        "policy_id": "LIFE-BOB-2209",
+        "client_id": 101,
+        "policy_type": "life",
+        "status": "active",
+        "premium_monthly_cad": 42.0,
+        "coverage_limit_cad": 500000
+      },
+      {
+        "policy_id": "AUTO-ALI-5520",
+        "client_id": 102,
+        "policy_type": "auto",
+        "status": "active",
+        "premium_monthly_cad": 122.0,
+        "coverage_limit_cad": 1000000
+      },
+      {
+        "policy_id": "RENT-ALI-6611",
+        "client_id": 102,
+        "policy_type": "renters",
+        "status": "active",
+        "premium_monthly_cad": 28.5,
+        "coverage_limit_cad": 40000
+      },
+      {
+        "policy_id": "AUTO-ROG-1001",
+        "client_id": 103,
+        "policy_type": "auto",
+        "status": "active",
+        "premium_monthly_cad": 210.75,
+        "coverage_limit_cad": 2000000
+      },
+      {
+        "policy_id": "HOME-ROG-1002",
+        "client_id": 103,
+        "policy_type": "home",
+        "status": "active",
+        "premium_monthly_cad": 175.0,
+        "coverage_limit_cad": 1200000
+      },
+      {
+        "policy_id": "LIFE-ROG-1003",
+        "client_id": 103,
+        "policy_type": "life",
+        "status": "active",
+        "premium_monthly_cad": 185.0,
+        "coverage_limit_cad": 1000000
+      }
+    ],
+    "investment_accounts": [
+      {
+        "account_id": "TFSA-BOB-901",
+        "client_id": 101,
+        "account_type": "TFSA",
+        "balance_cad": 28450.12,
+        "currency": "CAD"
+      },
+      {
+        "account_id": "RRSP-BOB-334",
+        "client_id": 101,
+        "account_type": "RRSP",
+        "balance_cad": 61220.55,
+        "currency": "CAD"
+      },
+      {
+        "account_id": "TFSA-ALI-210",
+        "client_id": 102,
+        "account_type": "TFSA",
+        "balance_cad": 15210.4,
+        "currency": "CAD"
+      },
+      {
+        "account_id": "TFSA-ROG-777",
+        "client_id": 103,
+        "account_type": "TFSA",
+        "balance_cad": 95000.0,
+        "currency": "CAD"
+      },
+      {
+        "account_id": "NR-ROG-888",
+        "client_id": 103,
+        "account_type": "non-registered",
+        "balance_cad": 240500.33,
+        "currency": "CAD"
+      }
+    ],
+    "claims": [
+      {
+        "claim_id": "CLM-2025-1188",
+        "policy_id": "AUTO-BOB-4412",
+        "client_id": 101,
+        "status": "closed",
+        "payout_cad": 1850.0,
+        "opened": "2025-11-02"
+      },
+      {
+        "claim_id": "CLM-2024-0441",
+        "policy_id": "HOME-ROG-1002",
+        "client_id": 103,
+        "status": "closed",
+        "payout_cad": 12500.0,
+        "opened": "2024-04-12"
+      }
+    ]
+  }
+}
