@@ -14,6 +14,7 @@ from dotenv import load_dotenv
 from util import (
     ask,
     ask_yes_no,
+    attack_run_resume_status,
     coerce_test_id,
     default_test_name,
     demo_attack_loop,
@@ -303,6 +304,7 @@ async def main() -> int:
                     file=sys.stderr,
                 )
                 return 2
+            print(await attack_run_resume_status(test_id), flush=True)
             echo_default = os.getenv("REDRAVEN_ECHO", "").strip().lower() in (
                 "1",
                 "true",

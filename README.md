@@ -4,10 +4,11 @@ Minimal end-to-end demo of [RedRaven](https://app.redraven.fireraven.ai) LLM red
 
 ## Features
 
-- **Interactive CLI**: Four modes — generate and run, run an existing test, generate only, or run the reconnaissance loop
+- **Interactive CLI**: Five modes — generate and run, run an existing test, generate only, reconnaissance loop, or attack loop
 - **Test generation**: Aligns with the RedRaven app (business context, use case, certifications, policies, test modes)
 - **Agent + evaluation flow**: `call_agent`, wait for evaluation, then `get_eval_summary` — or one-shot `generate_and_run_test`
 - **Reconnaissance loop**: Fetch attack-surface probes, call your agent, submit responses for refusal evaluation
+- **Attack loop**: Multi-turn red-team attacks via `/api/v2/…/attack-run`; auto-resumes an in-progress run on the test you choose
 - **Example LLM integration**: Optional OpenAI-backed `call_llm` so you can try the full pipeline quickly
 - **FireGuard bridge**: Export failing policies from results into FireGuard guardrails
 
@@ -92,7 +93,7 @@ Minimal end-to-end demo of [RedRaven](https://app.redraven.fireraven.ai) LLM red
    # Optional — prompted if unset (modes 1 and 3)
    REDRAVEN_PROJECT_ID=<uuid of a project in RedRaven>
 
-   # Optional — prompted if unset (mode 2)
+   # Optional — prompted if unset (modes 2 and 5)
    REDRAVEN_TEST_ID=<uuid of an existing test in RedRaven>
 
    # Optional — only if you use the default OpenAI call_llm in main.py
@@ -113,7 +114,7 @@ uv run python main.py
 
 ### Choose a mode
 
-The script prompts for one of four modes:
+The script prompts for one of five modes:
 
 | Mode | CLI choice | What it does |
 |------|------------|----------------|
@@ -121,12 +122,15 @@ The script prompts for one of four modes:
 | Call agent + run evaluation on existing test | `2` | `call_agent` → `ensure_evaluation_from_client_responses` → `wait_for_evaluation_ready` → `get_eval_summary` |
 | Generate test only | `3` | `client.generate_test(...)` — returns `test_id` for a later run |
 | Run reconnaissance loop | `4` | Fetch `metadata.reconnaissance.probes`, call your LLM per probe, `POST …/reconnaissance/evaluate` (refusal → `is_answered=false`) |
+| Run attack loop | `5` | Multi-turn attack run via `attack-run/begin/next/turns/complete`; auto-resumes an in-progress run on the test you choose |
 
 ![CLI mode selection](images/image-08-sdk-cli.png)
 
 You will be asked for **concurrency** (default `4`) and, depending on the mode, **Project ID** or **Test ID** (env vars are used as defaults when set).
 
 Mode `4` requires a test whose reconnaissance probes are already `completed` (created best-effort when generating policies in the app).
+
+Mode `5` requires a test with enabled scenarios and attack methods. Enter the **Test ID** (or set `REDRAVEN_TEST_ID`). If that test has an attack run still `running`, the demo skips `begin` and continues from the saved cursor; otherwise it starts a new run.
 
 For mode `2`, after the SDK finishes you should see a summary similar to:
 

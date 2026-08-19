@@ -90,7 +90,8 @@ def select_mode() -> str:
     print("  5) Run attack loop (scenarios → multi-turn attacks → eval)")
     print(
         "     Requires scenarios (+ attack methods) on the test; "
-        "uses /api/v2/…/attack-run begin/next/turns/complete."
+        "uses /api/v2/…/attack-run begin/next/turns/complete. "
+        "Auto-resumes an in-progress attack run on the test you choose."
     )
     choice = ask("Enter choice", default=default)
     if choice == "1":
@@ -443,43 +444,207 @@ def _reraise_attack_stage(stage: str, turn_n: int, exc: BaseException) -> None:
     ) from exc
 
 
-async def demo_attack_loop(
+def _latest_run_from_attack_results(doc: dict[str, Any]) -> dict[str, Any] | None:
+    runs = doc.get("runs")
+    if not isinstance(runs, list) or not runs:
+        return None
+    current = doc.get("current_run_id")
+    if isinstance(current, str):
+        for run in runs:
+            if isinstance(run, dict) and run.get("run_id") == current:
+                return run
+    last = runs[-1]
+    return last if isinstance(last, dict) else None
+
+
+def _awaiting_eval_from_test(
+    test: dict[str, Any],
+    run_id: str | None = None,
+) -> dict[str, Any] | None:
+    metadata = test.get("metadata")
+    if not isinstance(metadata, dict):
+        return None
+    attack_results = metadata.get("attack_results")
+    if not isinstance(attack_results, dict):
+        return None
+    run: dict[str, Any] | None = None
+    if run_id:
+        for candidate in attack_results.get("runs") or []:
+            if isinstance(candidate, dict) and candidate.get("run_id") == run_id:
+                run = candidate
+                break
+    if run is None:
+        run = _latest_run_from_attack_results(attack_results)
+    if not isinstance(run, dict):
+        return None
+    cursor = run.get("cursor")
+    if not isinstance(cursor, dict):
+        return None
+    awaiting = cursor.get("awaiting_eval")
+    if isinstance(awaiting, dict) and awaiting.get("attempt_id") is not None:
+        return awaiting
+    return None
+
+
+async def attack_run_resume_status(test_id: str) -> str:
+    """User-facing line: resume existing run on *test_id* or start fresh."""
+    ctx = await attack_run_resume_context(test_id)
+    if ctx["status"] == "running" and ctx.get("run_id"):
+        inner = ctx.get("summary", {}).get("summary")
+        attempts = inner.get("attempts_total", 0) if isinstance(inner, dict) else 0
+        awaiting = ctx.get("awaiting_eval")
+        pending_eval = (
+            f" pending eval on turn {awaiting.get('turn_index')}"
+            if isinstance(awaiting, dict)
+            else ""
+        )
+        return (
+            f"Resuming attack run {ctx['run_id']} on this test "
+            f"({attempts} attempt(s) recorded so far{pending_eval})."
+        )
+    status = ctx.get("status") or "idle"
+    return f"No running attack on this test (status={status}); will start a new run."
+
+
+async def attack_run_resume_context(test_id: str) -> dict[str, Any]:
+    """Load attack-run status and optional awaiting_eval for resume."""
+    summary = await _backend_request(
+        "GET",
+        f"/api/v2/tests/{test_id}/attack-results/summary",
+        timeout_s=30.0,
+    )
+    if not isinstance(summary, dict):
+        summary = {}
+
+    status = summary.get("status") if isinstance(summary.get("status"), str) else "idle"
+    run_id_raw = summary.get("run_id") or summary.get("current_run_id")
+    run_id = str(run_id_raw) if run_id_raw else None
+
+    awaiting_eval: dict[str, Any] | None = None
+    if status == "running":
+        test = await _backend_request("GET", f"/tests/{test_id}", timeout_s=30.0)
+        if isinstance(test, dict):
+            awaiting_eval = _awaiting_eval_from_test(test, run_id)
+
+    return {
+        "run_id": run_id,
+        "status": status,
+        "awaiting_eval": awaiting_eval,
+        "summary": summary,
+    }
+
+
+def _is_eval_pending_error(exc: BaseException) -> bool:
+    msg = str(exc).lower()
+    return "eval still pending" in msg
+
+
+async def _drain_awaiting_eval_if_needed(
     *,
     test_id: str,
-    llm: Callable[..., Awaitable[str]],
-) -> dict[str, Any]:
-    """Begin attack-run, follow next/turns until done, then complete."""
-    print(f"Starting attack run for test {test_id}…", flush=True)
-    try:
-        begin = await _backend_request(
-            "POST",
-            f"/api/v2/tests/{test_id}/attack-run/begin",
-            timeout_s=60.0,
-        )
-    except Exception as e:
-        _reraise_attack_stage("begin", 0, e)
-    if not isinstance(begin, dict):
-        raise RuntimeError("attack-run/begin returned unexpected payload")
-    run_id = begin.get("run_id")
+    run_id: str,
+    awaiting_eval: dict[str, Any] | None,
+) -> None:
+    if not isinstance(awaiting_eval, dict):
+        return
+    attempt_id = awaiting_eval.get("attempt_id")
+    turn_index = awaiting_eval.get("turn_index")
+    if attempt_id is None or turn_index is None:
+        return
     print(
-        f"run_id={run_id} work_count={begin.get('work_count')} "
-        f"scenarios={begin.get('scenarios_total')} "
-        f"techniques={begin.get('technique_ids')}",
+        f"Resuming pending attack eval: attempt={attempt_id} "
+        f"turn_index={turn_index}…",
         flush=True,
     )
+    result = await _poll_attack_eval(
+        test_id=test_id,
+        run_id=run_id,
+        attempt_id=str(attempt_id),
+        turn_index=int(turn_index),
+    )
+    print(f"    eval resumed: decision={result.get('decision')}", flush=True)
 
-    turn_n = 0
-    while True:
+
+async def _attack_run_next_with_eval_recovery(
+    *,
+    test_id: str,
+    run_id: str,
+    turn_n: int,
+) -> dict[str, Any]:
+    try:
+        nxt = await _backend_request(
+            "GET",
+            f"/api/v2/tests/{test_id}/attack-run/next",
+            timeout_s=180.0,
+        )
+    except Exception as e:
+        if not _is_eval_pending_error(e):
+            _reraise_attack_stage("next", turn_n, e)
+        ctx = await attack_run_resume_context(test_id)
+        await _drain_awaiting_eval_if_needed(
+            test_id=test_id,
+            run_id=str(ctx.get("run_id") or run_id),
+            awaiting_eval=ctx.get("awaiting_eval"),
+        )
         try:
             nxt = await _backend_request(
                 "GET",
                 f"/api/v2/tests/{test_id}/attack-run/next",
                 timeout_s=180.0,
             )
+        except Exception as retry_exc:
+            _reraise_attack_stage("next", turn_n, retry_exc)
+    if not isinstance(nxt, dict):
+        raise RuntimeError("attack-run/next returned unexpected payload")
+    return nxt
+
+
+async def demo_attack_loop(
+    *,
+    test_id: str,
+    llm: Callable[..., Awaitable[str]],
+) -> dict[str, Any]:
+    """Resume or begin attack-run, follow next/turns until done, then complete."""
+    ctx = await attack_run_resume_context(test_id)
+    if ctx["status"] == "running" and ctx.get("run_id"):
+        run_id = str(ctx["run_id"])
+        print(f"Resuming attack run {run_id} on test {test_id}…", flush=True)
+        begin = {"run_id": run_id, "resumed": True, **ctx.get("summary", {})}
+        await _drain_awaiting_eval_if_needed(
+            test_id=test_id,
+            run_id=run_id,
+            awaiting_eval=ctx.get("awaiting_eval"),
+        )
+    else:
+        print(f"Starting new attack run for test {test_id}…", flush=True)
+        try:
+            begin = await _backend_request(
+                "POST",
+                f"/api/v2/tests/{test_id}/attack-run/begin",
+                timeout_s=60.0,
+            )
+        except Exception as e:
+            _reraise_attack_stage("begin", 0, e)
+        if not isinstance(begin, dict):
+            raise RuntimeError("attack-run/begin returned unexpected payload")
+        run_id = str(begin.get("run_id") or "")
+        print(
+            f"run_id={run_id} work_count={begin.get('work_count')} "
+            f"scenarios={begin.get('scenarios_total')} "
+            f"techniques={begin.get('technique_ids')}",
+            flush=True,
+        )
+
+    turn_n = 0
+    while True:
+        try:
+            nxt = await _attack_run_next_with_eval_recovery(
+                test_id=test_id,
+                run_id=run_id,
+                turn_n=turn_n,
+            )
         except Exception as e:
             _reraise_attack_stage("next", turn_n, e)
-        if not isinstance(nxt, dict):
-            raise RuntimeError("attack-run/next returned unexpected payload")
         if nxt.get("done"):
             print("Attack run finished (server marked done).", flush=True)
             break
